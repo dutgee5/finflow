@@ -31,14 +31,14 @@ class TransactionRepositoryImpl @Inject constructor(
         type: String,
         amount: Double,
         description: String,
-    ): Resource<Unit> {
+    ): Resource<TransactionResponseDto> {
         return try {
             val request = TransactionRequestDto(type, amount, description)
             val response = api.addTransaction(request)
 
-            if (response.isSuccessful) {
-                // Ktor'dan dönen "İşlem başarıyla cüzdana eklendi!" mesajını döndür
-                Resource.Success(Unit)
+            if (response.isSuccessful && response.body() != null) {
+                // API'den dönen yeni işlem verisini döndür
+                Resource.Success(response.body()!!)
             } else {
                 Resource.Error("İşlem eklenemedi: ${response.message()}")
             }
