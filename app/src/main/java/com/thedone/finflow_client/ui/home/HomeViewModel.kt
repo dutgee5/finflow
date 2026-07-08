@@ -87,6 +87,28 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun deleteTransaction(id: Int) {
+        viewModelScope.launch {
+            when (val result = repository.deleteTransaction(id)) {
+                is Resource.Success -> {
+                    val updatedList = _state.value.transactions.filter { it.id != id }
+                    _state.update {
+                        it.copy(
+                            transactions = updatedList,
+                            balance = calculateBalance(updatedList)
+                        )
+                    }
+                }
+
+                is Resource.Error -> {
+                    _state.update { it.copy(error = result.message ?: "Silme başarısız oldu") }
+                }
+
+                else -> {}
+            }
+        }
+    }
+
     private fun calculateBalance(transactions: List<TransactionResponseDto>): Double {
         return transactions.sumOf {
             if (it.type == "INCOME") it.amount else -it.amount

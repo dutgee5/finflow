@@ -48,4 +48,19 @@ class TransactionRepositoryImpl @Inject constructor(
             Resource.Error("Bilinmeyen hata: ${e.localizedMessage}")
         }
     }
+
+    override suspend fun deleteTransaction(id: Int): Resource<Unit> {
+        return try {
+            val response = api.deleteTransaction(id)
+            if (response.isSuccessful) {
+                Resource.Success(Unit)
+            } else {
+                Resource.Error("İşlem silinemedi: ${response.message()}")
+            }
+        } catch (e: IOException) {
+            Resource.Error("Sunucuya ulaşılamadı. İnterneti kontrol edin.")
+        } catch (e: Exception) {
+            Resource.Error("Bilinmeyen hata: ${e.localizedMessage}")
+        }
+    }
 }

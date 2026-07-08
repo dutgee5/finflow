@@ -1,5 +1,7 @@
 package com.thedone.finflow_client.ui.home
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,11 +25,16 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxDefaults
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -42,7 +49,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-
 
 
 @Composable
@@ -116,12 +122,54 @@ fun HomeScreen(
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     // Yeni eklenenler en üstte görünsün diye reversed() kullanıyoruz
-                    items(state.transactions.reversed()) { transaction ->
-                        TransactionItem(
-                            description = transaction.description,
-                            amount = transaction.amount,
-                            type = transaction.type
+                    items(state.transactions.reversed(), key = { it.id }) { transaction ->
+
+                        var isDeleteTriggered by remember { mutableStateOf(false) }
+
+                        val dismissState = rememberSwipeToDismissBoxState(
+                            confirmValueChange = { dismissValue ->
+                                if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
+                                    // Sadece daha önce tetiklenmediyse ViewModel'a istek at
+                                    if (!isDeleteTriggered) {
+                                        isDeleteTriggered = true
+                                        viewModel.deleteTransaction(transaction.id)
+                                    }
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
                         )
+                        SwipeToDismissBox(
+                            state = dismissState,
+                            backgroundContent = {
+                                val color by animateColorAsState(
+                                    targetValue = if (dismissState.targetValue == SwipeToDismissBoxValue.Settled) Color.Transparent else Color.Red
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(vertical = 8.dp)
+                                        .background(color, RoundedCornerShape(12.dp))
+                                        .padding(horizontal = 20.dp),
+                                    contentAlignment = Alignment.CenterEnd
+                                ) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "Sil",
+                                        tint = Color.White
+                                    )
+                                }
+                            },
+                            enableDismissFromStartToEnd = false,
+                        ) {
+                            TransactionItem(
+                                description = transaction.description,
+                                amount = transaction.amount,
+                                type = transaction.type
+                            )
+                        }
+
                     }
                 }
             }

@@ -6,8 +6,10 @@ import com.thedone.finflow_client.data.remote.dto.TransactionRequestDto
 import com.thedone.finflow_client.data.remote.dto.TransactionResponseDto
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Path
 
 interface FinflowApi {
 
@@ -28,4 +30,7 @@ interface FinflowApi {
     suspend fun addTransaction(
         @Body request: TransactionRequestDto,
     ): Response<TransactionResponseDto>
+
+    @DELETE("transactions/{id}")
+    suspend fun deleteTransaction(@Path("id") id: Int): Response<Unit>
 }
