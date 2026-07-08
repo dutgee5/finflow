@@ -1,6 +1,7 @@
 package com.thedone.finflow_client.ui.home
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -63,6 +67,9 @@ fun HomeScreen(
 ) {
     val state by viewModel.state.collectAsState()
     var showDialog by remember { mutableStateOf(false) }
+
+    val totalIncome = state.transactions.filter { it.type == "INCOME" }.sumOf { it.amount }
+    val totalExpense = state.transactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
 
     Scaffold(
         topBar = {
@@ -126,6 +133,10 @@ fun HomeScreen(
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
+            }
+            if (state.transactions.isNotEmpty()) {
+                FinancePieChart(income = totalIncome, expense = totalExpense)
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
             Text(text = "Geçmiş İşlemler", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
@@ -205,6 +216,63 @@ fun HomeScreen(
                 showDialog = false
             }
         )
+    }
+}
+
+@Composable
+fun FinancePieChart(income: Double, expense: Double) {
+    val total = income + expense
+    // Veri yoksa veya sıfırsa grafiği eşit böl (Gri görünebilir veya 50-50 olabilir)
+    val incomePercentage = if (total > 0) (income / total).toFloat() else 0.5f
+    val expensePercentage = if (total > 0) (expense / total).toFloat() else 0.5f
+
+    val incomeSweep = incomePercentage * 360f
+    val expenseSweep = expensePercentage * 360f
+
+    val incomeColor = Color(0xFF4CAF50)
+    val expenseColor = Color(0xFFE53935)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        // Çizim Alanı
+        Canvas(modifier = Modifier.size(100.dp)) {
+            // Gelir Yayı (Yeşil)
+            drawArc(
+                color = incomeColor,
+                startAngle = -90f,
+                sweepAngle = incomeSweep,
+                useCenter = false, // True yaparsak Pac-Man gibi pasta dilimi olur, False yaparsak yüzük/halka olur
+                style = Stroke(width = 30f) // Halkanın kalınlığı
+            )
+            // Gider Yayı (Kırmızı)
+            drawArc(
+                color = expenseColor,
+                startAngle = -90f + incomeSweep,
+                sweepAngle = expenseSweep,
+                useCenter = false,
+                style = Stroke(width = 30f)
+            )
+        }
+
+        // Renklerin Açıklaması (Legend)
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(12.dp).background(incomeColor, RoundedCornerShape(50)))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Gelir: ₺$income", fontWeight = FontWeight.Medium)
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(12.dp).background(expenseColor, RoundedCornerShape(50)))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Gider: ₺$expense", fontWeight = FontWeight.Medium)
+            }
+        }
     }
 }
 
