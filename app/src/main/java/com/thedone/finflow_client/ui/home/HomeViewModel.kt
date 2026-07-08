@@ -2,6 +2,7 @@ package com.thedone.finflow_client.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.thedone.finflow_client.data.local.TokenManager
 import com.thedone.finflow_client.data.remote.dto.TransactionResponseDto
 import com.thedone.finflow_client.domain.repo.TransactionRepository
 import com.thedone.finflow_client.util.Resource
@@ -23,6 +24,7 @@ data class HomeState(
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repository: TransactionRepository,
+    private val tokenManager: TokenManager,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeState())
@@ -106,6 +108,12 @@ class HomeViewModel @Inject constructor(
 
                 else -> {}
             }
+        }
+    }
+
+    fun logout() {
+        viewModelScope.launch {
+            tokenManager.clearToken()
         }
     }
 
