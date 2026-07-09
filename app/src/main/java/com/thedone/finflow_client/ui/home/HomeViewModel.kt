@@ -11,14 +11,19 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import javax.inject.Inject
 
 
 data class HomeState(
     val isLoading: Boolean = false,
+    val groupedTransactions: Map<String, List<TransactionResponseDto>> = emptyMap(),
     val transactions: List<TransactionResponseDto> = emptyList(),
     val balance: Double = 0.0,
     val error: String = "",
+    val successMessage: String = "",
 )
 
 @HiltViewModel
@@ -44,7 +49,7 @@ class HomeViewModel @Inject constructor(
                     _state.update {
                         it.copy(
                             isLoading = false,
-                            transactions = txList,
+                            groupedTransactions = groupTransactions(txList),
                             balance = calculateBalance(txList)
                         )
                     }
@@ -65,26 +70,33 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = "") }
 
-            val result = repository.addTransaction(type, amount, description)
-
-            if (result is Resource.Success && result.data != null) {
-                // Tipi açıkça belirterek derleyicinin kafasının karışmasını kesin olarak önlüyoruz
-                val newTransaction: TransactionResponseDto = result.data
-
-                _state.update { currentState ->
-                    // Eski listeye (+) operatörü ile yeni nesneyi ekleyip yeni bir liste oluşturuyoruz (Çok daha güvenli)
-                    val updatedList = currentState.transactions + newTransaction
-
-                    currentState.copy(
-                        isLoading = false,
-                        transactions = updatedList,
-                        balance = calculateBalance(updatedList)
-                    )
+            when (val result = repository.addTransaction(type, amount, description)) {
+                is Resource.Success -> {
+                    val newTransaction = result.data
+                    if (newTransaction != null) {
+                        _state.update { currenState ->
+                            val updatedRaw =
+                                currenState.groupedTransactions.values.flatten() + newTransaction
+                            currenState.copy(
+                                isLoading = false,
+                                groupedTransactions = groupTransactions(updatedRaw),
+                                balance = calculateBalance(updatedRaw),
+                                successMessage = "İşlem başarıyla eklendi."
+                            )
+                        }
+                    }
                 }
-            } else if (result is Resource.Error) {
-                _state.update {
-                    it.copy(isLoading = false, error = result.message ?: "Ekleme hatası")
+
+                is Resource.Error -> {
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            error = result.message ?: "Ekleme hatası"
+                        )
+                    }
                 }
+
+                else -> {}
             }
         }
     }
@@ -93,11 +105,13 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = repository.deleteTransaction(id)) {
                 is Resource.Success -> {
-                    val updatedList = _state.value.transactions.filter { it.id != id }
-                    _state.update {
-                        it.copy(
-                            transactions = updatedList,
-                            balance = calculateBalance(updatedList)
+                    _state.update { currentState ->
+                        val updatedRaw =
+                            currentState.groupedTransactions.values.flatten().filter { it.id != id }
+                        currentState.copy(
+                            groupedTransactions = groupTransactions(updatedRaw),
+                            balance = calculateBalance(updatedRaw),
+                            successMessage = "İşlem başarıyla silindi."
                         )
                     }
                 }
@@ -115,6 +129,26 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             tokenManager.clearToken()
         }
+    }
+
+    fun clearMessages() {
+        _state.update { it.copy(error = "", successMessage = "") }
+    }
+
+    private fun groupTransactions(list: List<TransactionResponseDto>): Map<String, List<TransactionResponseDto>> {
+        val formatter = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale("tr"))
+        return list
+            .sortedByDescending { it.id }
+            .groupBy { tx ->
+                try {
+                    val datePart =
+                        tx.date.substringBefore("T") // "2024-07-09T14:30:00" -> "2024-07-09"
+                    val parsed = LocalDate.parse(datePart)
+                    parsed.format(formatter)
+                } catch (e: Exception) {
+                    "Geçmiş İşlemler"
+                }
+            }
     }
 
     private fun calculateBalance(transactions: List<TransactionResponseDto>): Double {

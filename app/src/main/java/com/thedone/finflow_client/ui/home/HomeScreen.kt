@@ -2,6 +2,7 @@ package com.thedone.finflow_client.ui.home
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,25 +19,26 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ExitToApp
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxDefaults
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,6 +46,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,7 +63,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
@@ -68,10 +71,31 @@ fun HomeScreen(
     val state by viewModel.state.collectAsState()
     var showDialog by remember { mutableStateOf(false) }
 
-    val totalIncome = state.transactions.filter { it.type == "INCOME" }.sumOf { it.amount }
-    val totalExpense = state.transactions.filter { it.type == "EXPENSE" }.sumOf { it.amount }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+
+    LaunchedEffect(state.error) {
+        if (state.error.isNotBlank()) {
+            snackbarHostState.showSnackbar(state.error)
+            viewModel.clearMessages() // Mesajı gösterdikten sonra sıfırla ki tekrar çıkmasın
+        }
+    }
+
+    // Başarı mesajı varsa Snackbar'da göster
+    LaunchedEffect(state.successMessage) {
+        if (state.successMessage.isNotBlank()) {
+            snackbarHostState.showSnackbar(state.successMessage)
+            viewModel.clearMessages()
+        }
+    }
+
+    val rawList = state.groupedTransactions.values.flatten()
+
+    val totalIncome = rawList.filter { it.type == "INCOME" }.sumOf { it.amount }
+    val totalExpense = rawList.filter { it.type == "EXPENSE" }.sumOf { it.amount }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("FinFlow Cüzdan", fontWeight = FontWeight.Bold) },
@@ -110,99 +134,116 @@ fun HomeScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 24.dp),
+                    .padding(bottom = 16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                shape = RoundedCornerShape(24.dp)
+                shape = RoundedCornerShape(16.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(32.dp),
+                        .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
                         text = "Toplam Bakiye",
                         fontSize = 16.sp,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "₺${"%.2f".format(state.balance)}",
-                        fontSize = 40.sp,
+                        fontSize = 36.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
             }
-            if (state.transactions.isNotEmpty()) {
+
+            // grafik
+            if (rawList.isNotEmpty()) {
                 FinancePieChart(income = totalIncome, expense = totalExpense)
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            Text(text = "Geçmiş İşlemler", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-            Spacer(modifier = Modifier.height(16.dp))
-
-            if (state.isLoading && state.transactions.isEmpty()) {
+            if (state.isLoading && state.groupedTransactions.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
-            } else if (state.error.isNotBlank()) {
-                Text(text = state.error, color = MaterialTheme.colorScheme.error)
-            } else if (state.transactions.isEmpty()) {
+            } else if (state.groupedTransactions.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(text = "Henüz bir işlem yok. Hemen bir tane ekle!")
                 }
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    // Yeni eklenenler en üstte görünsün diye reversed() kullanıyoruz
-                    items(state.transactions.reversed(), key = { it.id }) { transaction ->
+                    state.groupedTransactions.forEach { (dateHeader, transactionsForDate) ->
 
-                        var isDeleteTriggered by remember { mutableStateOf(false) }
-
-                        val dismissState = rememberSwipeToDismissBoxState(
-                            confirmValueChange = { dismissValue ->
-                                if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
-                                    // Sadece daha önce tetiklenmediyse ViewModel'a istek at
-                                    if (!isDeleteTriggered) {
-                                        isDeleteTriggered = true
-                                        viewModel.deleteTransaction(transaction.id)
-                                    }
-                                    true
-                                } else {
-                                    false
-                                }
-                            }
-                        )
-                        SwipeToDismissBox(
-                            state = dismissState,
-                            backgroundContent = {
-                                val color by animateColorAsState(
-                                    targetValue = if (dismissState.targetValue == SwipeToDismissBoxValue.Settled) Color.Transparent else Color.Red
+                        // yapışkan header
+                        stickyHeader {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.95f))
+                                    .padding(vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = dateHeader,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
                                 )
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(vertical = 8.dp)
-                                        .background(color, RoundedCornerShape(12.dp))
-                                        .padding(horizontal = 20.dp),
-                                    contentAlignment = Alignment.CenterEnd
-                                ) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "Sil",
-                                        tint = Color.White
-                                    )
-                                }
-                            },
-                            enableDismissFromStartToEnd = false,
-                        ) {
-                            TransactionItem(
-                                description = transaction.description,
-                                amount = transaction.amount,
-                                type = transaction.type
-                            )
+                            }
                         }
 
+                        // o tarihe ait işlemler
+                        items(transactionsForDate, key = { it.id }) { transaction ->
+                            var isDeleteTriggered by remember { mutableStateOf(false) }
+
+                            val dismissState = rememberSwipeToDismissBoxState(
+                                confirmValueChange = { dismissValue ->
+                                    if (dismissValue == SwipeToDismissBoxValue.EndToStart) {
+                                        if (!isDeleteTriggered) {
+                                            isDeleteTriggered = true
+                                            viewModel.deleteTransaction(transaction.id)
+                                        }
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
+                            )
+
+                            SwipeToDismissBox(
+                                state = dismissState,
+                                enableDismissFromStartToEnd = false,
+                                enableDismissFromEndToStart = true,
+                                backgroundContent = {
+                                    val color by animateColorAsState(
+                                        targetValue = if (dismissState.targetValue == SwipeToDismissBoxValue.Settled) Color.Transparent else Color.Red
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(vertical = 8.dp)
+                                            .background(color, RoundedCornerShape(12.dp))
+                                            .padding(horizontal = 20.dp),
+                                        contentAlignment = Alignment.CenterEnd
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Sil",
+                                            tint = Color.White
+                                        )
+                                    }
+                                },
+                                content = {
+                                    TransactionItem(
+                                        description = transaction.description,
+                                        amount = transaction.amount,
+                                        type = transaction.type
+                                    )
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -262,13 +303,21 @@ fun FinancePieChart(income: Double, expense: Double) {
         // Renklerin Açıklaması (Legend)
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(12.dp).background(incomeColor, RoundedCornerShape(50)))
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(incomeColor, RoundedCornerShape(50))
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Gelir: ₺$income", fontWeight = FontWeight.Medium)
             }
             Spacer(modifier = Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(12.dp).background(expenseColor, RoundedCornerShape(50)))
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(expenseColor, RoundedCornerShape(50))
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Gider: ₺$expense", fontWeight = FontWeight.Medium)
             }
