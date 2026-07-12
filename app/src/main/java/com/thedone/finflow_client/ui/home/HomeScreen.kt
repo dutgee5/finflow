@@ -61,6 +61,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.thedone.finflow_client.domain.model.TransactionType
 
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -88,11 +89,6 @@ fun HomeScreen(
             viewModel.clearMessages()
         }
     }
-
-    val rawList = state.groupedTransactions.values.flatten()
-
-    val totalIncome = rawList.filter { it.type == "INCOME" }.sumOf { it.amount }
-    val totalExpense = rawList.filter { it.type == "EXPENSE" }.sumOf { it.amount }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -160,8 +156,8 @@ fun HomeScreen(
             }
 
             // grafik
-            if (rawList.isNotEmpty()) {
-                FinancePieChart(income = totalIncome, expense = totalExpense)
+            if (state.groupedTransactions.isNotEmpty()) {
+                FinancePieChart(income = state.totalIncome, expense = state.totalExpense)
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
@@ -326,8 +322,8 @@ fun FinancePieChart(income: Double, expense: Double) {
 }
 
 @Composable
-fun TransactionItem(description: String, amount: Double, type: String) {
-    val isIncome = type == "INCOME"
+fun TransactionItem(description: String, amount: Double, type: TransactionType) {
+    val isIncome = type == TransactionType.INCOME
     val color = if (isIncome) Color(0xFF2E7D32) else Color(0xFFD32F2F)
     val sign = if (isIncome) "+" else "-"
 
@@ -359,7 +355,7 @@ fun TransactionItem(description: String, amount: Double, type: String) {
 @Composable
 fun AddTransactionDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, Double, String) -> Unit,
+    onConfirm: (TransactionType, Double, String) -> Unit,
 ) {
     var description by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
@@ -403,7 +399,7 @@ fun AddTransactionDialog(
         confirmButton = {
             Button(onClick = {
                 val amountDouble = amount.toDoubleOrNull() ?: 0.0
-                val type = if (isIncome) "INCOME" else "EXPENSE"
+                val type = if (isIncome) TransactionType.INCOME else TransactionType.EXPENSE
                 if (description.isNotBlank() && amountDouble > 0) {
                     onConfirm(type, amountDouble, description)
                 }

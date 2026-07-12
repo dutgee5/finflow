@@ -3,36 +3,28 @@ package com.thedone.finflow_client.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.thedone.finflow_client.data.local.TokenManager
-import com.thedone.finflow_client.data.remote.dto.TransactionResponseDto
+import com.thedone.finflow_client.domain.model.Transaction
+import com.thedone.finflow_client.domain.model.TransactionType
 import com.thedone.finflow_client.domain.repo.TransactionRepository
+import com.thedone.finflow_client.domain.usecase.CalculateFinancesUseCase
+import com.thedone.finflow_client.domain.usecase.FormatTransactionsUseCase
 import com.thedone.finflow_client.util.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import javax.inject.Inject
-
-
-data class HomeState(
-    val isLoading: Boolean = false,
-    val groupedTransactions: Map<String, List<TransactionResponseDto>> = emptyMap(),
-    val transactions: List<TransactionResponseDto> = emptyList(),
-    val balance: Double = 0.0,
-    val error: String = "",
-    val successMessage: String = "",
-)
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repository: TransactionRepository,
     private val tokenManager: TokenManager,
+    private val calculateFinancesUseCase: CalculateFinancesUseCase,
+    private val formatTransactionsUseCase: FormatTransactionsUseCase,
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(HomeState())
+    private val _state = MutableStateFlow(HomeUiState())
     val state = _state.asStateFlow()
 
     init {
@@ -45,14 +37,7 @@ class HomeViewModel @Inject constructor(
 
             when (val result = repository.getTransactions()) {
                 is Resource.Success -> {
-                    val txList = result.data ?: emptyList()
-                    _state.update {
-                        it.copy(
-                            isLoading = false,
-                            groupedTransactions = groupTransactions(txList),
-                            balance = calculateBalance(txList)
-                        )
-                    }
+                    updateStateWithNewData(result.data ?: emptyList())
                 }
 
                 is Resource.Error -> {
@@ -66,24 +51,17 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun addTransaction(type: String, amount: Double, description: String) {
+    fun addTransaction(type: TransactionType, amount: Double, description: String) {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = "") }
 
-            when (val result = repository.addTransaction(type, amount, description)) {
+            when (val result = repository.addTransaction(type.name, amount, description)) {
                 is Resource.Success -> {
                     val newTransaction = result.data
                     if (newTransaction != null) {
-                        _state.update { currenState ->
-                            val updatedRaw =
-                                currenState.groupedTransactions.values.flatten() + newTransaction
-                            currenState.copy(
-                                isLoading = false,
-                                groupedTransactions = groupTransactions(updatedRaw),
-                                balance = calculateBalance(updatedRaw),
-                                successMessage = "İşlem başarıyla eklendi."
-                            )
-                        }
+                        val currentRawList = _state.value.groupedTransactions.values.flatten()
+                        val updatedList = currentRawList + newTransaction
+                        updateStateWithNewData(updatedList, "İşlem başarıyla eklendi.")
                     }
                 }
 
@@ -105,15 +83,9 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = repository.deleteTransaction(id)) {
                 is Resource.Success -> {
-                    _state.update { currentState ->
-                        val updatedRaw =
-                            currentState.groupedTransactions.values.flatten().filter { it.id != id }
-                        currentState.copy(
-                            groupedTransactions = groupTransactions(updatedRaw),
-                            balance = calculateBalance(updatedRaw),
-                            successMessage = "İşlem başarıyla silindi."
-                        )
-                    }
+                    val updatedList =
+                        _state.value.groupedTransactions.values.flatten().filter { it.id != id }
+                    updateStateWithNewData(updatedList, "İşlem silindi.")
                 }
 
                 is Resource.Error -> {
@@ -135,25 +107,19 @@ class HomeViewModel @Inject constructor(
         _state.update { it.copy(error = "", successMessage = "") }
     }
 
-    private fun groupTransactions(list: List<TransactionResponseDto>): Map<String, List<TransactionResponseDto>> {
-        val formatter = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale("tr"))
-        return list
-            .sortedByDescending { it.id }
-            .groupBy { tx ->
-                try {
-                    val datePart =
-                        tx.date.substringBefore("T") // "2024-07-09T14:30:00" -> "2024-07-09"
-                    val parsed = LocalDate.parse(datePart)
-                    parsed.format(formatter)
-                } catch (e: Exception) {
-                    "Geçmiş İşlemler"
-                }
-            }
-    }
+    private fun updateStateWithNewData(rawList: List<Transaction>, successMsg: String = "") {
+        val finances = calculateFinancesUseCase(rawList)
+        val grouped = formatTransactionsUseCase(rawList)
 
-    private fun calculateBalance(transactions: List<TransactionResponseDto>): Double {
-        return transactions.sumOf {
-            if (it.type == "INCOME") it.amount else -it.amount
+        _state.update {
+            it.copy(
+                isLoading = false,
+                groupedTransactions = grouped,
+                balance = finances.balance,
+                totalIncome = finances.totalIncome,
+                totalExpense = finances.totalExpense,
+                successMessage = successMsg
+            )
         }
     }
 }
