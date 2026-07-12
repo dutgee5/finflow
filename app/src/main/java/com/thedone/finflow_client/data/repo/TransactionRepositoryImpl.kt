@@ -1,8 +1,10 @@
 package com.thedone.finflow_client.data.repo
 
+import com.thedone.finflow_client.data.mapper.toTransaction
 import com.thedone.finflow_client.data.remote.FinflowApi
 import com.thedone.finflow_client.data.remote.dto.TransactionRequestDto
 import com.thedone.finflow_client.data.remote.dto.TransactionResponseDto
+import com.thedone.finflow_client.domain.model.Transaction
 import com.thedone.finflow_client.domain.repo.TransactionRepository
 import com.thedone.finflow_client.util.Resource
 import java.io.IOException
@@ -11,12 +13,13 @@ import javax.inject.Inject
 class TransactionRepositoryImpl @Inject constructor(
     private val api: FinflowApi,
 ) : TransactionRepository {
-    override suspend fun getTransactions(): Resource<List<TransactionResponseDto>> {
+    override suspend fun getTransactions(): Resource<List<Transaction>> {
         return try {
             val response = api.getTransactions()
             if (response.isSuccessful && response.body() != null) {
-                // API'den gelen işlem listesini başarıyla döndür
-                Resource.Success(response.body()!!)
+                // map ile dönerek transaction listesine çevirme
+                val domainTransactions = response.body()!!.map { it.toTransaction() }
+                Resource.Success(domainTransactions)
             } else {
                 Resource.Error("İşlemler alınamadı: ${response.message()}")
             }
@@ -31,14 +34,14 @@ class TransactionRepositoryImpl @Inject constructor(
         type: String,
         amount: Double,
         description: String,
-    ): Resource<TransactionResponseDto> {
+    ): Resource<Transaction> {
         return try {
             val request = TransactionRequestDto(type, amount, description)
             val response = api.addTransaction(request)
 
             if (response.isSuccessful && response.body() != null) {
-                // API'den dönen yeni işlem verisini döndür
-                Resource.Success(response.body()!!)
+                // ekleneni saf modele çevir
+                Resource.Success(response.body()!!.toTransaction())
             } else {
                 Resource.Error("İşlem eklenemedi: ${response.message()}")
             }
