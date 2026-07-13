@@ -7,6 +7,7 @@ import com.thedone.finflow_client.domain.model.Transaction
 import com.thedone.finflow_client.domain.model.TransactionType
 import com.thedone.finflow_client.domain.repo.TransactionRepository
 import com.thedone.finflow_client.domain.usecase.CalculateFinancesUseCase
+import com.thedone.finflow_client.domain.usecase.ExportTransactionsUseCase
 import com.thedone.finflow_client.domain.usecase.FilterTransactionsUseCase
 import com.thedone.finflow_client.domain.usecase.FormatTransactionsUseCase
 import com.thedone.finflow_client.util.Resource
@@ -24,6 +25,7 @@ class HomeViewModel @Inject constructor(
     private val calculateFinancesUseCase: CalculateFinancesUseCase,
     private val formatTransactionsUseCase: FormatTransactionsUseCase,
     private val filterTransactionsUseCase: FilterTransactionsUseCase,
+    private val exportTransactionsUseCase: ExportTransactionsUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
@@ -109,6 +111,11 @@ class HomeViewModel @Inject constructor(
 
     fun clearMessages() {
         _state.update { it.copy(error = "", successMessage = "") }
+    }
+
+    fun generateExportData(): String {
+        val currentFilteredList = _state.value.groupedTransactions.values.flatten()
+        return exportTransactionsUseCase(currentFilteredList)
     }
 
     fun onSearchQueryChange(query: String) {
