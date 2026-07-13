@@ -7,6 +7,7 @@ import com.thedone.finflow_client.domain.model.Transaction
 import com.thedone.finflow_client.domain.model.TransactionType
 import com.thedone.finflow_client.domain.repo.TransactionRepository
 import com.thedone.finflow_client.domain.usecase.CalculateFinancesUseCase
+import com.thedone.finflow_client.domain.usecase.FilterTransactionsUseCase
 import com.thedone.finflow_client.domain.usecase.FormatTransactionsUseCase
 import com.thedone.finflow_client.util.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,10 +23,13 @@ class HomeViewModel @Inject constructor(
     private val tokenManager: TokenManager,
     private val calculateFinancesUseCase: CalculateFinancesUseCase,
     private val formatTransactionsUseCase: FormatTransactionsUseCase,
+    private val filterTransactionsUseCase: FilterTransactionsUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
     val state = _state.asStateFlow()
+
+    private var allTransactions: List<Transaction> = emptyList()
 
     init {
         getTransactions()
@@ -107,9 +111,32 @@ class HomeViewModel @Inject constructor(
         _state.update { it.copy(error = "", successMessage = "") }
     }
 
+    fun onSearchQueryChange(query: String) {
+        _state.update { it.copy(searchQuery = query) }
+        applyFilters()
+    }
+
+    fun onFilterChange(filterType: String) {
+        _state.update { it.copy(selectedFilter = filterType) }
+        applyFilters()
+    }
+
     private fun updateStateWithNewData(rawList: List<Transaction>, successMsg: String = "") {
-        val finances = calculateFinancesUseCase(rawList)
-        val grouped = formatTransactionsUseCase(rawList)
+        allTransactions = rawList
+        applyFilters(successMsg)
+    }
+
+    private fun applyFilters(successMsg: String = "") {
+        val currentState = _state.value
+
+        val filteredList = filterTransactionsUseCase(
+            allTransactions,
+            currentState.searchQuery,
+            currentState.selectedFilter
+        )
+
+        val finances = calculateFinancesUseCase(filteredList)
+        val grouped = formatTransactionsUseCase(filteredList)
 
         _state.update {
             it.copy(
@@ -118,7 +145,7 @@ class HomeViewModel @Inject constructor(
                 balance = finances.balance,
                 totalIncome = finances.totalIncome,
                 totalExpense = finances.totalExpense,
-                successMessage = successMsg
+                successMessage = successMsg.ifBlank { it.successMessage }
             )
         }
     }

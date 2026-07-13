@@ -10,4 +10,7 @@ data class HomeUiState(
     val totalExpense: Double = 0.0,
     val error: String = "",
     val successMessage: String = "",
+
+    val searchQuery: String = "",
+    val selectedFilter: String = "ALL",
 )

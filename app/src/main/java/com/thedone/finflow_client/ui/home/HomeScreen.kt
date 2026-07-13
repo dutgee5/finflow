@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -156,10 +157,45 @@ fun HomeScreen(
             }
 
             // grafik
-            if (state.groupedTransactions.isNotEmpty()) {
-                FinancePieChart(income = state.totalIncome, expense = state.totalExpense)
-                Spacer(modifier = Modifier.height(16.dp))
+            if (state.groupedTransactions.isNotEmpty() || state.searchQuery.isNotBlank() || state.selectedFilter != "ALL") {
+                if (state.groupedTransactions.isEmpty()) {
+                    FinancePieChart(income = state.totalIncome, expense = state.totalExpense)
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
             }
+
+            OutlinedTextField(
+                value = state.searchQuery,
+                onValueChange = { viewModel.onSearchQueryChange(it) },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("İşlem ara (Örn: Market, Maaş)...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Ara") },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = state.selectedFilter == "ALL",
+                    onClick = { viewModel.onFilterChange("ALL") },
+                    label = { Text("Hepsi") }
+                )
+                FilterChip(
+                    selected = state.selectedFilter == "INCOME",
+                    onClick = { viewModel.onFilterChange("INCOME") },
+                    label = { Text("Gelir") }
+                )
+                FilterChip(
+                    selected = state.selectedFilter == "EXPENSE",
+                    onClick = { viewModel.onFilterChange("EXPENSE") },
+                    label = { Text("Gider") }
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
 
             if (state.isLoading && state.groupedTransactions.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
