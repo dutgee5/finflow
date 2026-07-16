@@ -85,6 +85,38 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun updateTransaction(id: Int, type: TransactionType, amount: Double, description: String) {
+        viewModelScope.launch {
+            _state.update { it.copy(isLoading = true, error = "") }
+
+            when (val result = repository.updateTransaction(id, type.name, amount, description)) {
+                is Resource.Success -> {
+                    if (result.data != null) {
+                        val updatedList = allTransactions.toMutableList()
+                        val index = updatedList.indexOfFirst { it.id == id }
+
+                        if (index != -1) {
+                            updatedList[index] = result.data
+                            allTransactions = updatedList
+                            applyFilters("İşlem başarıyla güncellendi!")
+                        }
+                    }
+                }
+
+                is Resource.Error -> {
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            error = result.message ?: "Güncelleme hatası"
+                        )
+                    }
+                }
+
+                else -> {}
+            }
+        }
+    }
+
     fun deleteTransaction(id: Int) {
         viewModelScope.launch {
             when (val result = repository.deleteTransaction(id)) {

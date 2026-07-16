@@ -9,6 +9,7 @@ import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 
 interface FinflowApi {
@@ -28,6 +29,12 @@ interface FinflowApi {
 
     @POST("/transactions")
     suspend fun addTransaction(
+        @Body request: TransactionRequestDto,
+    ): Response<TransactionResponseDto>
+
+    @PUT("/transactions/{id}")
+    suspend fun updateTransaction(
+        @Path("id") id: Int,
         @Body request: TransactionRequestDto,
     ): Response<TransactionResponseDto>
 

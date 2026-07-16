@@ -6,6 +6,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -67,6 +68,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.thedone.finflow_client.domain.model.Transaction
 import com.thedone.finflow_client.domain.model.TransactionType
 import kotlinx.coroutines.launch
 
@@ -77,25 +79,12 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+
+    //düzenelenecekse değeri tut yoksa ekle
+    var transactionEdit by remember { mutableStateOf<Transaction?>(null) }
     var showDialog by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
-
-
-    LaunchedEffect(state.error) {
-        if (state.error.isNotBlank()) {
-            snackbarHostState.showSnackbar(state.error)
-            viewModel.clearMessages() // Mesajı gösterdikten sonra sıfırla ki tekrar çıkmasın
-        }
-    }
-
-    // Başarı mesajı varsa Snackbar'da göster
-    LaunchedEffect(state.successMessage) {
-        if (state.successMessage.isNotBlank()) {
-            snackbarHostState.showSnackbar(state.successMessage)
-            viewModel.clearMessages()
-        }
-    }
 
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -116,6 +105,20 @@ fun HomeScreen(
             } catch (e: Exception) {
                 coroutineScope.launch { snackbarHostState.showSnackbar("Rapor kaydedilemedi!") }
             }
+        }
+    }
+    LaunchedEffect(state.error) {
+        if (state.error.isNotBlank()) {
+            snackbarHostState.showSnackbar(state.error)
+            viewModel.clearMessages() // Mesajı gösterdikten sonra sıfırla ki tekrar çıkmasın
+        }
+    }
+
+    // Başarı mesajı varsa Snackbar'da göster
+    LaunchedEffect(state.successMessage) {
+        if (state.successMessage.isNotBlank()) {
+            snackbarHostState.showSnackbar(state.successMessage)
+            viewModel.clearMessages()
         }
     }
 
@@ -143,7 +146,10 @@ fun HomeScreen(
 
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showDialog = true },
+                onClick = {
+                    transactionEdit = null
+                    showDialog = true
+                },
                 containerColor = MaterialTheme.colorScheme.primary
             ) {
                 Icon(
@@ -159,6 +165,37 @@ fun HomeScreen(
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
+            OutlinedTextField(
+                value = state.searchQuery,
+                onValueChange = { viewModel.onSearchQueryChange(it) },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("İşlem ara (Örn: Market, Maaş)...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Ara") },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = state.selectedFilter == "ALL",
+                    onClick = { viewModel.onFilterChange("ALL") },
+                    label = { Text("Hepsi") }
+                )
+                FilterChip(
+                    selected = state.selectedFilter == "INCOME",
+                    onClick = { viewModel.onFilterChange("INCOME") },
+                    label = { Text("Gelir") }
+                )
+                FilterChip(
+                    selected = state.selectedFilter == "EXPENSE",
+                    onClick = { viewModel.onFilterChange("EXPENSE") },
+                    label = { Text("Gider") }
+                )
+            }
+
             //Bakiye Kartı
             Card(
                 modifier = Modifier
@@ -189,44 +226,13 @@ fun HomeScreen(
             }
 
             // grafik
-            if (state.groupedTransactions.isNotEmpty() || state.searchQuery.isNotBlank() || state.selectedFilter != "ALL") {
-                if (state.groupedTransactions.isEmpty()) {
-                    FinancePieChart(income = state.totalIncome, expense = state.totalExpense)
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
+
+            if (state.groupedTransactions.isEmpty()) {
+                FinancePieChart(income = state.totalIncome, expense = state.totalExpense)
+                Spacer(modifier = Modifier.height(16.dp))
             }
 
-            OutlinedTextField(
-                value = state.searchQuery,
-                onValueChange = { viewModel.onSearchQueryChange(it) },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("İşlem ara (Örn: Market, Maaş)...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Ara") },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(
-                    selected = state.selectedFilter == "ALL",
-                    onClick = { viewModel.onFilterChange("ALL") },
-                    label = { Text("Hepsi") }
-                )
-                FilterChip(
-                    selected = state.selectedFilter == "INCOME",
-                    onClick = { viewModel.onFilterChange("INCOME") },
-                    label = { Text("Gelir") }
-                )
-                FilterChip(
-                    selected = state.selectedFilter == "EXPENSE",
-                    onClick = { viewModel.onFilterChange("EXPENSE") },
-                    label = { Text("Gider") }
-                )
-            }
             Spacer(modifier = Modifier.height(16.dp))
 
             if (state.isLoading && state.groupedTransactions.isEmpty()) {
@@ -303,7 +309,11 @@ fun HomeScreen(
                                     TransactionItem(
                                         description = transaction.description,
                                         amount = transaction.amount,
-                                        type = transaction.type
+                                        type = transaction.type,
+                                        onClick = {
+                                            transactionEdit = transaction
+                                            showDialog = true
+                                        }
                                     )
                                 }
                             )
@@ -314,11 +324,17 @@ fun HomeScreen(
         }
     }
     if (showDialog) {
-        AddTransactionDialog(
+        TransactionFormDialog(
+            transaction = transactionEdit,
             onDismiss = { showDialog = false },
-            onConfirm = { type, amount, desc ->
-                viewModel.addTransaction(type, amount, desc)
+            onConfirm = { id, type, amount, desc ->
+                if (id == null) {
+                    viewModel.addTransaction(type, amount, desc)
+                } else {
+                    viewModel.updateTransaction(id, type, amount, desc)
+                }
                 showDialog = false
+                transactionEdit = null
             }
         )
     }
@@ -390,7 +406,12 @@ fun FinancePieChart(income: Double, expense: Double) {
 }
 
 @Composable
-fun TransactionItem(description: String, amount: Double, type: TransactionType) {
+fun TransactionItem(
+    description: String,
+    amount: Double,
+    type: TransactionType,
+    onClick: () -> Unit,
+) {
     val isIncome = type == TransactionType.INCOME
     val color = if (isIncome) Color(0xFF2E7D32) else Color(0xFFD32F2F)
     val sign = if (isIncome) "+" else "-"
@@ -398,7 +419,8 @@ fun TransactionItem(description: String, amount: Double, type: TransactionType) 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 8.dp)
+            .clickable { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
@@ -409,7 +431,11 @@ fun TransactionItem(description: String, amount: Double, type: TransactionType) 
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = description, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+
+            Column {
+                Text(text = description, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text(text = "Düzenlemek için tıkla", fontSize = 11.sp, color = Color.Gray)
+            }
             Text(
                 text = "$sign ₺${"%.2f".format(amount)}",
                 fontSize = 18.sp,
@@ -421,17 +447,21 @@ fun TransactionItem(description: String, amount: Double, type: TransactionType) 
 }
 
 @Composable
-fun AddTransactionDialog(
+fun TransactionFormDialog(
+    transaction: Transaction? = null,
     onDismiss: () -> Unit,
-    onConfirm: (TransactionType, Double, String) -> Unit,
+    onConfirm: (id: Int?, TransactionType, Double, String) -> Unit,
 ) {
-    var description by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-    var isIncome by remember { mutableStateOf(true) }
+
+    val isEditMode = transaction != null
+
+    var description by remember { mutableStateOf(transaction?.description ?: "") }
+    var amount by remember { mutableStateOf(transaction?.amount?.toString() ?: "") }
+    var isIncome by remember { mutableStateOf(transaction?.type == TransactionType.INCOME || transaction == null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Yeni İşlem Ekle") },
+        title = { Text(if (isEditMode) "İşlemi Düzenle" else "Yeni İşlem Ekle") },
         text = {
             Column {
                 Row(
@@ -468,10 +498,8 @@ fun AddTransactionDialog(
             Button(onClick = {
                 val amountDouble = amount.toDoubleOrNull() ?: 0.0
                 val type = if (isIncome) TransactionType.INCOME else TransactionType.EXPENSE
-                if (description.isNotBlank() && amountDouble > 0) {
-                    onConfirm(type, amountDouble, description)
-                }
-            }) { Text("Ekle") }
+                onConfirm(transaction?.id, type, amountDouble, description)
+            }) { Text(if (isEditMode) "Güncelle" else "Ekle") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("İptal") }

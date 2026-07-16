@@ -12,6 +12,13 @@ interface TransactionRepository {
         description: String,
     ): Resource<Transaction>
 
+    suspend fun updateTransaction(
+        id: Int,
+        type: String,
+        amount: Double,
+        description: String,
+    ): Resource<Transaction>
+
     suspend fun deleteTransaction(id: Int): Resource<Unit>
 
 }

@@ -52,6 +52,28 @@ class TransactionRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun updateTransaction(
+        id: Int,
+        type: String,
+        amount: Double,
+        description: String,
+    ): Resource<Transaction> {
+        return try {
+            val request = TransactionRequestDto(type, amount, description)
+            val response = api.updateTransaction(id, request)
+
+            if (response.isSuccessful && response.body() != null) {
+                Resource.Success(response.body()!!.toTransaction())
+            } else {
+                Resource.Error("İşlem güncellenemedi: ${response.message()}")
+            }
+        } catch (e: IOException) {
+            Resource.Error("Sunucuya ulaşılamadı. İnterneti kontrol edin.")
+        } catch (e: Exception) {
+            Resource.Error("Bilinmeyen hata : ${e.localizedMessage}")
+        }
+    }
+
     override suspend fun deleteTransaction(id: Int): Resource<Unit> {
         return try {
             val response = api.deleteTransaction(id)
