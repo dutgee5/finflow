@@ -1,5 +1,7 @@
 package com.thedone.finflow_client.data.repo
 
+import com.thedone.finflow_client.data.local.dao.TransactionDao
+import com.thedone.finflow_client.data.mapper.toEntity
 import com.thedone.finflow_client.data.mapper.toTransaction
 import com.thedone.finflow_client.data.remote.FinflowApi
 import com.thedone.finflow_client.data.remote.dto.TransactionRequestDto
@@ -7,26 +9,35 @@ import com.thedone.finflow_client.data.remote.dto.TransactionResponseDto
 import com.thedone.finflow_client.domain.model.Transaction
 import com.thedone.finflow_client.domain.repo.TransactionRepository
 import com.thedone.finflow_client.util.Resource
+import kotlinx.coroutines.flow.first
 import java.io.IOException
 import javax.inject.Inject
 
 class TransactionRepositoryImpl @Inject constructor(
     private val api: FinflowApi,
+    private val dao: TransactionDao,
 ) : TransactionRepository {
     override suspend fun getTransactions(): Resource<List<Transaction>> {
+        val localData = dao.getAllTransactions().first().map { it.toTransaction() }
         return try {
             val response = api.getTransactions()
             if (response.isSuccessful && response.body() != null) {
-                // map ile dönerek transaction listesine çevirme
-                val domainTransactions = response.body()!!.map { it.toTransaction() }
-                Resource.Success(domainTransactions)
+                val remoteTransactions = response.body()!!
+                dao.clearAll()
+                dao.insertTransactions(remoteTransactions.map { it.toEntity() })
+                val updatedLocalData = dao.getAllTransactions().first().map { it.toTransaction() }
+                Resource.Success(updatedLocalData)
             } else {
-                Resource.Error("İşlemler alınamadı: ${response.message()}")
+                Resource.Error("Sunucu hatası, çevrimdışı veriler gösteriliyor.:", localData)
             }
         } catch (e: IOException) {
-            Resource.Error("Sunucuya ulaşılamadı. İnterneti kontrol edin.")
+            if (localData.isNotEmpty()) {
+                Resource.Success(localData)
+            } else {
+                Resource.Error("İnternet bağlantısı yok ve yerel veri bulunamadı.")
+            }
         } catch (e: Exception) {
-            Resource.Error("Bilinmeyen hata: ${e.localizedMessage}")
+            Resource.Error("Bilinmeyen hata: ${e.localizedMessage}", localData)
         }
     }
 
@@ -40,8 +51,9 @@ class TransactionRepositoryImpl @Inject constructor(
             val response = api.addTransaction(request)
 
             if (response.isSuccessful && response.body() != null) {
-                // ekleneni saf modele çevir
-                Resource.Success(response.body()!!.toTransaction())
+                val remoteData = response.body()!!
+                dao.insertTransaction(remoteData.toEntity())
+                Resource.Success(remoteData.toTransaction())
             } else {
                 Resource.Error("İşlem eklenemedi: ${response.message()}")
             }
@@ -63,7 +75,9 @@ class TransactionRepositoryImpl @Inject constructor(
             val response = api.updateTransaction(id, request)
 
             if (response.isSuccessful && response.body() != null) {
-                Resource.Success(response.body()!!.toTransaction())
+                val remoteData = response.body()!!
+                dao.insertTransaction(remoteData.toEntity())
+                Resource.Success(remoteData.toTransaction())
             } else {
                 Resource.Error("İşlem güncellenemedi: ${response.message()}")
             }
@@ -78,6 +92,7 @@ class TransactionRepositoryImpl @Inject constructor(
         return try {
             val response = api.deleteTransaction(id)
             if (response.isSuccessful) {
+                dao.deleteTransactionById(id)
                 Resource.Success(Unit)
             } else {
                 Resource.Error("İşlem silinemedi: ${response.message()}")
